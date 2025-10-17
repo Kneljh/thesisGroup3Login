@@ -4,13 +4,17 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:flutter/services.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
 import 'splash_screen.dart';
+import 'purifier.dart';
 
+// ✅ Entry point
 void main() {
   runApp(MaterialApp(debugShowCheckedModeBanner: false, home: SplashScreen()));
 }
 
-// --------- Recommendation Model ---------
+// ✅ Recommendation model
 class GasRecommendation {
   final String title;
   final String status;
@@ -23,7 +27,7 @@ class GasRecommendation {
   });
 }
 
-// --------- Helper for sensor status ---------
+// ✅ Sensor status helper
 class SensorData {
   static String getStatusIcon(double value, String type) {
     if (type == "CO2") {
@@ -38,7 +42,7 @@ class SensorData {
   }
 }
 
-// --------- Main Screen ---------
+// ✅ Main screen with navigation
 class MainScreen extends StatefulWidget {
   @override
   _MainScreenState createState() => _MainScreenState();
@@ -46,12 +50,35 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+
+  // Screens: Home, Purifier (direct intent), History
   late List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
-    _screens = [HomeScreen(), Center(child: Text("History Page"))];
+    _screens = [
+      HomeScreen(),
+      Container(), // placeholder for purifier intent
+      Center(child: Text("History Page")),
+    ];
+  }
+
+  // ✅ Open Mi Home app using intent
+  void _openMiHomeApp() async {
+    const packageName = 'com.xiaomi.smarthome';
+    final intent = AndroidIntent(
+      action: 'android.intent.action.MAIN',
+      package: packageName,
+      componentName: 'com.xiaomi.smarthome.SmartHomeMainActivity',
+      flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
+    );
+
+    try {
+      await intent.launch();
+    } catch (e) {
+      debugPrint('❌ Failed to open Mi Home: $e');
+    }
   }
 
   @override
@@ -62,9 +89,17 @@ class _MainScreenState extends State<MainScreen> {
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          if (index == 1) {
+            // Purifier button → open Mi Home app
+            _openMiHomeApp();
+            return;
+          }
+          setState(() => _currentIndex = index);
+        },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.air), label: 'Purifier'),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: "History"),
         ],
         selectedItemColor: Color(0xFF0BBEDE),
@@ -74,7 +109,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// --------- Home Screen ---------
+// ✅ Home screen with sensors, dropdowns, and recommendations
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -92,8 +127,8 @@ class _HomeScreenState extends State<HomeScreen> {
   double co2Level = 0.0;
   double ammoniaLevel = 0.0;
 
-  final String espIPco2 = 'http://10.86.0.40';
-  final String espIPammonia = 'http://10.86.0.16';
+  final String espIPco2 = 'http://10.105.689.16';
+  final String espIPammonia = 'http://10.105.69.40';
 
   final List<GasRecommendation> recommendations = [
     GasRecommendation(
@@ -152,14 +187,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // ✅ Keep system UI visible
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     timer = Timer.periodic(const Duration(seconds: 3), (_) => fetchData());
   }
 
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     timer?.cancel();
     super.dispose();
   }
@@ -193,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // ✅ Background combination
+        // ✅ Background
         Column(
           children: [
             ClipRect(
@@ -218,33 +251,38 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
 
         // ✅ Foreground content
-        Positioned.fill(
-          child: SafeArea(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  const SizedBox(height: 300),
-                  _buildAirQualityDropdown(),
-                  const SizedBox(height: 20),
-                  if (isAirDropdownOpen && selectedOption != null)
-                    _buildCircularIndicator(),
-                  const SizedBox(height: 40),
-                  _buildRecommendationsDropdown(),
-                  const SizedBox(height: 20),
-                  if (isRecommendationDropdownOpen &&
-                      selectedRecommendation != null)
-                    _buildRecommendationDetails(),
-                  const SizedBox(height: 60),
-                ],
+        SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 260),
+              _buildAirQualityDropdown(),
+              const SizedBox(height: 20),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      if (isAirDropdownOpen && selectedOption != null)
+                        _buildCircularIndicator(),
+                      const SizedBox(height: 40),
+                      _buildRecommendationsDropdown(),
+                      const SizedBox(height: 20),
+                      if (isRecommendationDropdownOpen &&
+                          selectedRecommendation != null)
+                        _buildRecommendationDetails(),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  // ======= Helper Widgets =======
+  // ---------- Helper Widgets ----------
+
   Widget _buildAirQualityDropdown() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -272,12 +310,16 @@ class _HomeScreenState extends State<HomeScreen> {
               'Ammonia ${SensorData.getStatusIcon(ammoniaLevel, "NH3")}',
             ),
           ),
+          DropdownMenuItem(
+            value: 'Carbon Dioxide & Ammonia',
+            child: Text(
+              'Both ${SensorData.getStatusIcon(co2Level, "CO2")}${SensorData.getStatusIcon(ammoniaLevel, "NH3")}',
+            ),
+          ),
         ],
         onChanged: (value) {
           setState(() {
             selectedOption = value;
-            displayValue =
-                (value == "Carbon Dioxide") ? co2Level : ammoniaLevel;
             isAirDropdownOpen = true;
             isRecommendationDropdownOpen = false;
             selectedRecommendation = null;
@@ -288,33 +330,60 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCircularIndicator() {
+    if (selectedOption == "Carbon Dioxide & Ammonia") {
+      // ✅ Both vertically stacked
+      return Column(
+        children: [
+          const Text(
+            "Both Air Quality Levels",
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF60B574),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildGasIndicator("Carbon Dioxide", co2Level, _normalizeCO2),
+          const SizedBox(height: 30),
+          _buildGasIndicator("Ammonia", ammoniaLevel, _normalizeAmmonia),
+        ],
+      );
+    } else {
+      return _buildGasIndicator(
+        selectedOption!,
+        displayValue,
+        selectedOption == "Carbon Dioxide" ? _normalizeCO2 : _normalizeAmmonia,
+      );
+    }
+  }
+
+  Widget _buildGasIndicator(
+    String gas,
+    double value,
+    double Function(double) normalize,
+  ) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 30),
+      margin: const EdgeInsets.symmetric(horizontal: 10),
       padding: const EdgeInsets.all(20),
       decoration: _boxDecoration(const Color(0xFF60B574)),
       child: CircularPercentIndicator(
-        radius: 120.0,
-        lineWidth: 15.0,
-        percent:
-            (selectedOption == "Carbon Dioxide")
-                ? _normalizeCO2(displayValue)
-                : _normalizeAmmonia(displayValue),
+        radius: 100.0,
+        lineWidth: 12.0,
+        percent: normalize(value),
         center: Text(
-          "$selectedOption\n${displayValue.toStringAsFixed(selectedOption == "Carbon Dioxide" ? 0 : 1)} ppm",
+          "$gas\n${value.toStringAsFixed(gas == "Carbon Dioxide" ? 0 : 1)} ppm",
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 22.0,
+            fontSize: 18.0,
             color: Color(0xFF60B574),
           ),
         ),
         circularStrokeCap: CircularStrokeCap.round,
         progressColor:
-            (selectedOption == "Carbon Dioxide")
-                ? const Color(0xFF0BBEDE)
-                : Colors.red,
+            (gas == "Carbon Dioxide") ? const Color(0xFF0BBEDE) : Colors.red,
         backgroundColor:
-            (selectedOption == "Carbon Dioxide")
+            (gas == "Carbon Dioxide")
                 ? const Color(0xFFB0E0F5)
                 : const Color(0xFFF5B0B0),
       ),
