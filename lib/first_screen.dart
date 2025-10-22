@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'main.dart'; // For navigation to MainScreen
 
 class FirstScreen extends StatefulWidget {
+  const FirstScreen({super.key});
+
   @override
   _FirstScreenState createState() => _FirstScreenState();
 }

@@ -5,6 +5,8 @@ void main() {
 }
 
 class MySimpleCoopApp extends StatelessWidget {
+  const MySimpleCoopApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -19,6 +21,8 @@ class MySimpleCoopApp extends StatelessWidget {
 }
 
 class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -81,7 +85,7 @@ class QualityTile extends StatelessWidget {
   final String title;
   final bool isSafe;
 
-  const QualityTile({required this.title, required this.isSafe});
+  const QualityTile({super.key, required this.title, required this.isSafe});
 
   @override
   Widget build(BuildContext context) {

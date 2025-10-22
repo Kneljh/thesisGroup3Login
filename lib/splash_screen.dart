@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'first_screen.dart'; // Make sure this import is correct
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
   @override
   _SplashScreenState createState() => _SplashScreenState();
 }

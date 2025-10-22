@@ -76,6 +76,8 @@ class SensorReading {
 
 
 class HistoryScreen extends StatefulWidget {
+  const HistoryScreen({super.key});
+
   @override
   _HistoryScreenState createState() => _HistoryScreenState();
 }
@@ -142,7 +144,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(
-                    '${r.timestamp.toLocal().toString().substring(0, 19)}',
+                    r.timestamp.toLocal().toString().substring(0, 19),
                     style: TextStyle(color: Colors.grey[700]),
                   ),
                 );

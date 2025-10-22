@@ -4,17 +4,93 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:percent_indicator/circular_percent_indicator.dart';
 import 'package:flutter/services.dart';
-import 'package:android_intent_plus/android_intent.dart';
-import 'package:android_intent_plus/flag.dart';
-import 'splash_screen.dart';
-import 'purifier.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
+import 'history.dart';
+import 'login_screen.dart'; // Import the new login screen
 
-// ✅ Entry point
-void main() {
-  runApp(MaterialApp(debugShowCheckedModeBanner: false, home: SplashScreen()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const MyApp());
 }
 
-// ✅ Recommendation model
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Mobile Air Quality',
+      home: AuthWrapper(), // Start with an authentication wrapper
+    );
+  }
+}
+
+// This widget checks the auth state and shows the correct screen
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasData) {
+          return const MainScreen(); // User is logged in
+        }
+        // UPDATED: Show the LogInScreen first
+        return LogInScreen(); // User is not logged in
+      },
+    );
+  }
+}
+
+// --------- Firestore Service ---------
+class FirestoreService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Future<void> addUser(String uid, String fullName, String email) async {
+    await _firestore.collection('users').doc(uid).set({
+      'full_name': fullName,
+      'email': email,
+      'created_at': FieldValue.serverTimestamp(),
+    });
+  }
+}
+
+// --------- Firebase Auth Helper ---------
+class AuthService {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  Future<User?> signUp(String fullName, String email, String password) async {
+    try {
+      UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
+
+      await FirestoreService().addUser(
+        userCredential.user!.uid,
+        fullName,
+        email,
+      );
+
+      return userCredential.user;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Sign up failed: ${e.message}');
+      return null;
+    }
+  }
+}
+
+// --------- Gas Recommendation Model ---------
 class GasRecommendation {
   final String title;
   final String status;
@@ -27,7 +103,7 @@ class GasRecommendation {
   });
 }
 
-// ✅ Sensor status helper
+// --------- Sensor Data Helper ---------
 class SensorData {
   static String getStatusIcon(double value, String type) {
     if (type == "CO2") {
@@ -42,43 +118,22 @@ class SensorData {
   }
 }
 
-// ✅ Main screen with navigation
+// --------- Main Screen ---------
 class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+
   @override
   _MainScreenState createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-
-  // Screens: Home, Purifier (direct intent), History
-  late List<Widget> _screens;
+  late final List<Widget> _screens;
 
   @override
   void initState() {
     super.initState();
-    _screens = [
-      HomeScreen(),
-      Container(), // placeholder for purifier intent
-      Center(child: Text("History Page")),
-    ];
-  }
-
-  // ✅ Open Mi Home app using intent
-  void _openMiHomeApp() async {
-    const packageName = 'com.xiaomi.smarthome';
-    final intent = AndroidIntent(
-      action: 'android.intent.action.MAIN',
-      package: packageName,
-      componentName: 'com.xiaomi.smarthome.SmartHomeMainActivity',
-      flags: <int>[Flag.FLAG_ACTIVITY_NEW_TASK],
-    );
-
-    try {
-      await intent.launch();
-    } catch (e) {
-      debugPrint('❌ Failed to open Mi Home: $e');
-    }
+    _screens = [const HomeScreen(), HistoryScreen()];
   }
 
   @override
@@ -89,17 +144,9 @@ class _MainScreenState extends State<MainScreen> {
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          if (index == 1) {
-            // Purifier button → open Mi Home app
-            _openMiHomeApp();
-            return;
-          }
-          setState(() => _currentIndex = index);
-        },
+        onTap: (index) => setState(() => _currentIndex = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.air), label: 'Purifier'),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: "History"),
         ],
         selectedItemColor: Color(0xFF0BBEDE),
@@ -109,8 +156,10 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// ✅ Home screen with sensors, dropdowns, and recommendations
+// --------- Home Screen ---------
 class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
@@ -127,8 +176,8 @@ class _HomeScreenState extends State<HomeScreen> {
   double co2Level = 0.0;
   double ammoniaLevel = 0.0;
 
-  final String espIPco2 = 'http://10.105.689.16';
-  final String espIPammonia = 'http://10.105.69.40';
+  final String espIPco2 = 'http://10.86.0.40';
+  final String espIPammonia = 'http://10.86.0.16';
 
   final List<GasRecommendation> recommendations = [
     GasRecommendation(
@@ -207,15 +256,15 @@ class _HomeScreenState extends State<HomeScreen> {
         final nh3Data = jsonDecode(nh3Response.body);
 
         setState(() {
-          co2Level = (co2Data['co2'] ?? 0).toDouble();
-          ammoniaLevel = (nh3Data['ammonia'] ?? 0).toDouble();
+          co2Level = double.tryParse(co2Data['co2'].toString()) ?? 0.0;
+          ammoniaLevel = double.tryParse(nh3Data['ammonia'].toString()) ?? 0.0;
 
           if (selectedOption == "Carbon Dioxide") displayValue = co2Level;
           if (selectedOption == "Ammonia") displayValue = ammoniaLevel;
         });
       }
     } catch (e) {
-      print("Fetch failed: $e");
+      debugPrint("Fetch failed: $e");
     }
   }
 
@@ -226,7 +275,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // ✅ Background
         Column(
           children: [
             ClipRect(
@@ -249,39 +297,31 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-
-        // ✅ Foreground content
-        SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 260),
-              _buildAirQualityDropdown(),
-              const SizedBox(height: 20),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      if (isAirDropdownOpen && selectedOption != null)
-                        _buildCircularIndicator(),
-                      const SizedBox(height: 40),
-                      _buildRecommendationsDropdown(),
-                      const SizedBox(height: 20),
-                      if (isRecommendationDropdownOpen &&
-                          selectedRecommendation != null)
-                        _buildRecommendationDetails(),
-                      const SizedBox(height: 80),
-                    ],
-                  ),
-                ),
+        Positioned.fill(
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  const SizedBox(height: 300),
+                  _buildAirQualityDropdown(),
+                  const SizedBox(height: 20),
+                  if (isAirDropdownOpen && selectedOption != null)
+                    _buildCircularIndicator(),
+                  const SizedBox(height: 40),
+                  _buildRecommendationsDropdown(),
+                  const SizedBox(height: 20),
+                  if (isRecommendationDropdownOpen &&
+                      selectedRecommendation != null)
+                    _buildRecommendationDetails(),
+                  const SizedBox(height: 60),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ],
     );
   }
-
-  // ---------- Helper Widgets ----------
 
   Widget _buildAirQualityDropdown() {
     return Container(
@@ -310,16 +350,12 @@ class _HomeScreenState extends State<HomeScreen> {
               'Ammonia ${SensorData.getStatusIcon(ammoniaLevel, "NH3")}',
             ),
           ),
-          DropdownMenuItem(
-            value: 'Carbon Dioxide & Ammonia',
-            child: Text(
-              'Both ${SensorData.getStatusIcon(co2Level, "CO2")}${SensorData.getStatusIcon(ammoniaLevel, "NH3")}',
-            ),
-          ),
         ],
         onChanged: (value) {
           setState(() {
             selectedOption = value;
+            displayValue =
+                (value == "Carbon Dioxide") ? co2Level : ammoniaLevel;
             isAirDropdownOpen = true;
             isRecommendationDropdownOpen = false;
             selectedRecommendation = null;
@@ -330,60 +366,33 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCircularIndicator() {
-    if (selectedOption == "Carbon Dioxide & Ammonia") {
-      // ✅ Both vertically stacked
-      return Column(
-        children: [
-          const Text(
-            "Both Air Quality Levels",
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF60B574),
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildGasIndicator("Carbon Dioxide", co2Level, _normalizeCO2),
-          const SizedBox(height: 30),
-          _buildGasIndicator("Ammonia", ammoniaLevel, _normalizeAmmonia),
-        ],
-      );
-    } else {
-      return _buildGasIndicator(
-        selectedOption!,
-        displayValue,
-        selectedOption == "Carbon Dioxide" ? _normalizeCO2 : _normalizeAmmonia,
-      );
-    }
-  }
-
-  Widget _buildGasIndicator(
-    String gas,
-    double value,
-    double Function(double) normalize,
-  ) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
+      margin: const EdgeInsets.symmetric(horizontal: 30),
       padding: const EdgeInsets.all(20),
       decoration: _boxDecoration(const Color(0xFF60B574)),
       child: CircularPercentIndicator(
-        radius: 100.0,
-        lineWidth: 12.0,
-        percent: normalize(value),
+        radius: 120.0,
+        lineWidth: 15.0,
+        percent:
+            (selectedOption == "Carbon Dioxide")
+                ? _normalizeCO2(displayValue)
+                : _normalizeAmmonia(displayValue),
         center: Text(
-          "$gas\n${value.toStringAsFixed(gas == "Carbon Dioxide" ? 0 : 1)} ppm",
+          "$selectedOption\n${displayValue.toStringAsFixed(selectedOption == "Carbon Dioxide" ? 0 : 1)} ppm",
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 18.0,
+            fontSize: 22.0,
             color: Color(0xFF60B574),
           ),
         ),
         circularStrokeCap: CircularStrokeCap.round,
         progressColor:
-            (gas == "Carbon Dioxide") ? const Color(0xFF0BBEDE) : Colors.red,
+            (selectedOption == "Carbon Dioxide")
+                ? const Color(0xFF0BBEDE)
+                : Colors.red,
         backgroundColor:
-            (gas == "Carbon Dioxide")
+            (selectedOption == "Carbon Dioxide")
                 ? const Color(0xFFB0E0F5)
                 : const Color(0xFFF5B0B0),
       ),
