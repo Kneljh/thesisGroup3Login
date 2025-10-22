@@ -133,7 +133,6 @@ class _LogInScreenState extends State<LogInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // --- FIXED TYPO HERE ---
     return Scaffold(
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -150,10 +149,14 @@ class _LogInScreenState extends State<LogInScreen> {
           child: Stack(
             children: [
               const Positioned(
+                // --- MODIFIED FOR CENTERING ---
                 left: 0,
-                top: 0,
+                right: 0,
+                top: 130, // <-- Moved it down from the top
                 child: Text(
                   'Log In',
+                  textAlign:
+                      TextAlign.center, // <-- Added this to center the text
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 50,
@@ -179,7 +182,7 @@ class _LogInScreenState extends State<LogInScreen> {
                           _isPasswordVisible
                               ? Icons.visibility
                               : Icons.visibility_off,
-                          // --- CHANGED ICON COLOR ---
+                          // --- ICON COLOR SET TO BLACK ---
                           color: Colors.black,
                         ),
                         onPressed: () {

@@ -162,10 +162,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
           child: Stack(
             children: [
               const Positioned(
-                left: 80,
+                // --- MODIFIED FOR CENTERING ---
+                left: 0,
+                right: 0,
                 top: 130,
                 child: Text(
                   'Sign Up',
+                  textAlign: TextAlign.center, // <-- Added this
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 50,
